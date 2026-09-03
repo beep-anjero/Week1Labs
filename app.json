@@ -1,4 +1,5 @@
-{
+﻿{
+  "name": "Week1Labs",
   "expo": {
     "name": "Week1Labs",
     "slug": "Week1Labs",
@@ -6,6 +7,9 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1B2A4A"
+    },
     "ios": {
       "supportsTablet": true
     },
