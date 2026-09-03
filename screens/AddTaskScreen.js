@@ -1,33 +1,138 @@
-import { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, FlatList } from 'react-native';
+﻿import { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  Button,
+  StyleSheet,
+  FlatList,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import TaskCard from '../components/TaskCard';
+import { colors } from '../theme';
 
 export default function AddTaskScreen() {
-  const [taskText, setTaskText] = useState('');
-  const [tasks, setTasks] = useState([]);
+  const [taskText, setTaskText]       = useState('');
+  const [tasks, setTasks]             = useState([]);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [quote, setQuote]             = useState("Loading today's motivation...");
+  const [isLoaded, setIsLoaded]       = useState(false);
 
+  // ── Lab 8: Load tasks from AsyncStorage on mount ──────────────────────────
+  useEffect(() => {
+    async function loadTasks() {
+      try {
+        const stored = await AsyncStorage.getItem('tasks');
+        if (stored !== null) {
+          setTasks(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.warn('Failed to load tasks:', e);
+      } finally {
+        setIsLoaded(true);
+      }
+    }
+    loadTasks();
+  }, []);
+
+  // ── Lab 8: Save tasks to AsyncStorage whenever they change ────────────────
+  useEffect(() => {
+    if (!isLoaded) return; // Prevent overwriting stored data before load
+    async function saveTasks() {
+      try {
+        await AsyncStorage.setItem('tasks', JSON.stringify(tasks));
+      } catch (e) {
+        console.warn('Failed to save tasks:', e);
+      }
+    }
+    saveTasks();
+  }, [tasks, isLoaded]);
+
+  // ── Lab 9: Fetch a motivational quote ─────────────────────────────────────
+  function fetchQuote() {
+    fetch('https://api.quotable.io/random')
+      .then((res) => res.json())
+      .then((data) => setQuote(data.content))
+      .catch(() => setQuote('Believe in yourself and get it done!'));
+  }
+
+  useEffect(() => {
+    fetchQuote();
+  }, []);
+
+  // ── Lab 7: Add task with validation ───────────────────────────────────────
   function handleAddTask() {
-    if (taskText.trim() === '') return;
+    if (taskText.trim() === '') {
+      setErrorMessage('Please type a task before adding it.');
+      return;
+    }
     const newTask = { id: Date.now().toString(), title: taskText, done: false };
     setTasks([...tasks, newTask]);
     setTaskText('');
+    setErrorMessage('');
+  }
+
+  // ── Lab 6: Toggle task done/pending ───────────────────────────────────────
+  function handleToggleTask(id) {
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+  }
+
+  // ── Lab 10: Delete a task ─────────────────────────────────────────────────
+  function handleDeleteTask(id) {
+    setTasks(tasks.filter((t) => t.id !== id));
   }
 
   return (
     <View style={styles.container}>
+
+      {/* Lab 9: Motivational quote */}
+      <View style={styles.quoteBox}>
+        <Text style={styles.quoteText}>"{quote}"</Text>
+        <Button title="New Quote" onPress={fetchQuote} color={colors.teal} />
+      </View>
+
       <Text style={styles.heading}>Add a Task</Text>
+
+      {/* Lab 7: Input + validation */}
       <TextInput
         style={styles.input}
         placeholder="What do you need to do?"
+        placeholderTextColor={colors.gray}
         value={taskText}
-        onChangeText={setTaskText}
+        onChangeText={(text) => {
+          setTaskText(text);
+          if (errorMessage) setErrorMessage('');
+        }}
       />
-      <Button title="Add Task" onPress={handleAddTask} />
-      <Text style={{ marginTop: 10 }}>You have {tasks.length} task(s)</Text>
+      {errorMessage !== '' && (
+        <Text style={styles.error}>{errorMessage}</Text>
+      )}
+
+      <Button title="Add Task" onPress={handleAddTask} color={colors.navy} />
+
+      <Text style={styles.count}>You have {tasks.length} task(s)</Text>
+
+      {/* Lab 7: Celebration message */}
+      {tasks.length > 0 && tasks.every((t) => t.done) && (
+        <Text style={styles.celebration}>All done! Great work 🎉</Text>
+      )}
+
+      {/* Lab 6: FlatList with empty state, separator, toggle, delete */}
       <FlatList
         data={tasks}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <TaskCard title={item.title} done={item.done} />}
+        renderItem={({ item }) => (
+          <TaskCard
+            title={item.title}
+            done={item.done}
+            onToggle={() => handleToggleTask(item.id)}
+            onDelete={() => handleDeleteTask(item.id)}
+          />
+        )}
+        ListEmptyComponent={
+          <Text style={styles.empty}>No tasks yet — add one above! 👆</Text>
+        }
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         style={styles.list}
       />
     </View>
@@ -39,21 +144,61 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 60,
     paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.white,
+  },
+  quoteBox: {
+    backgroundColor: colors.lightBg,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  quoteText: {
+    fontStyle: 'italic',
+    color: colors.navy,
+    marginBottom: 8,
+    fontSize: 14,
   },
   heading: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 12,
+    color: colors.navy,
   },
   input: {
     borderWidth: 1,
     borderColor: '#D8DEE9',
     borderRadius: 8,
     padding: 10,
-    marginBottom: 10,
+    marginBottom: 6,
+    color: colors.navy,
+  },
+  error: {
+    color: colors.red,
+    fontSize: 13,
+    marginBottom: 6,
+  },
+  count: {
+    marginTop: 10,
+    marginBottom: 4,
+    color: colors.gray,
+  },
+  celebration: {
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.teal,
+    marginVertical: 8,
   },
   list: {
-    marginTop: 16,
+    marginTop: 8,
+  },
+  empty: {
+    textAlign: 'center',
+    marginTop: 32,
+    color: colors.gray,
+    fontSize: 15,
+  },
+  separator: {
+    height: 8,
   },
 });
