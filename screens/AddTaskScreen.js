@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { db } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 import {
   collection,
   addDoc,
@@ -7,6 +7,8 @@ import {
   doc,
   updateDoc,
   deleteDoc,
+  query,
+  where,
 } from 'firebase/firestore';
 import {
   View,
@@ -29,14 +31,29 @@ export default function AddTaskScreen() {
 
   // ── Lab 8: Load tasks from AsyncStorage on mount ──────────────────────────
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'tasks'), (snapshot) => {
-      const loadedTasks = snapshot.docs.map((docItem) => ({
-        id: docItem.id,
-        ...docItem.data(),
-      }));
-      setTasks(loadedTasks);
-    });
-    return unsubscribe;
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const tasksQuery = query(
+      collection(db, 'tasks'),
+      where('ownerId', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(
+      tasksQuery,
+      (snapshot) => {
+        const loadedTasks = snapshot.docs.map((docItem) => ({
+          id: docItem.id,
+          ...docItem.data(),
+        }));
+        setTasks(loadedTasks);
+      },
+      (error) => {
+        console.error('Firestore listener error:', error.message);
+      }
+    );
+
+    return () => unsubscribe();
   }, []);
   // ── Lab 8: Save tasks to AsyncStorage whenever they change ────────────────
   useEffect(() => {
@@ -69,9 +86,24 @@ export default function AddTaskScreen() {
       setErrorMessage('Please type a task before adding it.');
       return;
     }
-    await addDoc(collection(db, 'tasks'), { title: taskText, done: false });
-    setTaskText('');
-    setErrorMessage('');
+    const user = auth.currentUser;
+
+    if (!user) {
+      setErrorMessage('User session not found. Please log in again.');
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, 'tasks'), {
+        title: taskText,
+        done: false,
+        ownerId: user.uid,
+      });
+      setTaskText('');
+      setErrorMessage('');
+    } catch (error) {
+      setErrorMessage(error.message);
+    }
   }
   async function handleToggleTask(id, currentDone) {
     await updateDoc(doc(db, 'tasks', id), { done: !currentDone });
