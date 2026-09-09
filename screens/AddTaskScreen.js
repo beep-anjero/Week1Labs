@@ -1,4 +1,13 @@
 ﻿import { useState, useEffect } from 'react';
+import { db } from '../firebaseConfig';
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  doc,
+  updateDoc,
+  deleteDoc,
+} from 'firebase/firestore';
 import {
   View,
   Text,
@@ -12,29 +21,23 @@ import TaskCard from '../components/TaskCard';
 import { colors } from '../theme';
 
 export default function AddTaskScreen() {
-  const [taskText, setTaskText]       = useState('');
-  const [tasks, setTasks]             = useState([]);
+  const [taskText, setTaskText] = useState('');
+  const [tasks, setTasks] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
-  const [quote, setQuote]             = useState("Loading today's motivation...");
-  const [isLoaded, setIsLoaded]       = useState(false);
+  const [quote, setQuote] = useState("Loading today's motivation...");
+  const [isLoaded, setIsLoaded] = useState(false);
 
   // ── Lab 8: Load tasks from AsyncStorage on mount ──────────────────────────
   useEffect(() => {
-    async function loadTasks() {
-      try {
-        const stored = await AsyncStorage.getItem('tasks');
-        if (stored !== null) {
-          setTasks(JSON.parse(stored));
-        }
-      } catch (e) {
-        console.warn('Failed to load tasks:', e);
-      } finally {
-        setIsLoaded(true);
-      }
-    }
-    loadTasks();
+    const unsubscribe = onSnapshot(collection(db, 'tasks'), (snapshot) => {
+      const loadedTasks = snapshot.docs.map((docItem) => ({
+        id: docItem.id,
+        ...docItem.data(),
+      }));
+      setTasks(loadedTasks);
+    });
+    return unsubscribe;
   }, []);
-
   // ── Lab 8: Save tasks to AsyncStorage whenever they change ────────────────
   useEffect(() => {
     if (!isLoaded) return; // Prevent overwriting stored data before load
@@ -61,25 +64,20 @@ export default function AddTaskScreen() {
   }, []);
 
   // ── Lab 7: Add task with validation ───────────────────────────────────────
-  function handleAddTask() {
+  async function handleAddTask() {
     if (taskText.trim() === '') {
       setErrorMessage('Please type a task before adding it.');
       return;
     }
-    const newTask = { id: Date.now().toString(), title: taskText, done: false };
-    setTasks([...tasks, newTask]);
+    await addDoc(collection(db, 'tasks'), { title: taskText, done: false });
     setTaskText('');
     setErrorMessage('');
   }
-
-  // ── Lab 6: Toggle task done/pending ───────────────────────────────────────
-  function handleToggleTask(id) {
-    setTasks(tasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+  async function handleToggleTask(id, currentDone) {
+    await updateDoc(doc(db, 'tasks', id), { done: !currentDone });
   }
-
-  // ── Lab 10: Delete a task ─────────────────────────────────────────────────
-  function handleDeleteTask(id) {
-    setTasks(tasks.filter((t) => t.id !== id));
+  async function handleDeleteTask(id) {
+    await deleteDoc(doc(db, 'tasks', id));
   }
 
   return (
@@ -125,7 +123,7 @@ export default function AddTaskScreen() {
           <TaskCard
             title={item.title}
             done={item.done}
-            onToggle={() => handleToggleTask(item.id)}
+            onToggle={() => handleToggleTask(item.id, item.done)}
             onDelete={() => handleDeleteTask(item.id)}
           />
         )}
